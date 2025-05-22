@@ -51,7 +51,7 @@ if consultar:
 
             st.markdown("### Parâmetros de projeção")
 
-            # Simulação de CAGR Lucro Líq. 5 anos
+            # CAGR Lucro Líquido 5 anos
             income_stmt = acao.financials
             if income_stmt is not None and not income_stmt.empty and "Net Income" in income_stmt.index:
                 net_incomes = income_stmt.loc["Net Income"].dropna().sort_index(ascending=True)
@@ -60,7 +60,7 @@ if consultar:
                     if cagr_lucro is not None:
                         st.info(f"📈 CAGR Lucro Líquido 5 anos: {cagr_lucro * 100:.2f}%".replace(".", ","))
 
-            # Simulação de Dividend Yield médio 5 anos
+            # Dividend Yield médio 5 anos
             if dividends is not None and not dividends.empty:
                 hist = acao.history(period="5y")
                 hist["Year"] = hist.index.year
