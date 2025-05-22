@@ -76,7 +76,7 @@ if consultar:
                     st.info(f"📤 Dividend Yield médio 5 anos: {dy_medio * 100:.2f}%".replace(".", ","))
 
             crescimento = st.slider("Crescimento anual do lucro (%)", 0.00, 0.30, 0.10, step=0.01)
-            payout = st.slider("Payout Ratio (%)", 0, 100, 50) / 100
+            payout = st.slider("Payout (%)", 0, 100, 50) / 100
             anos = st.slider("Período de análise (anos)", 1, 20, 10)
             margem = st.slider("Margem de segurança (%)", 0, 50, 10) / 100
 
