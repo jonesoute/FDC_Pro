@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import requests
 import pandas as pd
+import numpy as np
 
 st.set_page_config(page_title="Valuation por Lucro", layout="centered")
 st.title("📊 Valuation com base no Lucro por Ação (LPA)")
@@ -20,9 +21,9 @@ def get_taxa_selic_futura():
         return 0.105
 
 def calcular_cagr(valores):
-    if len(valores) >= 2 and valores.iloc[0] > 0 and valores.iloc[-1] > 0:
+    if len(valores) >= 2 and valores[0] > 0 and valores[-1] > 0:
         anos = len(valores) - 1
-        return (valores.iloc[-1] / valores.iloc[0]) ** (1 / anos) - 1
+        return (valores[-1] / valores[0]) ** (1 / anos) - 1
     return None
 
 if consultar:
@@ -34,10 +35,9 @@ if consultar:
         lpa = info.get("trailingEps", None)
         beta = info.get("beta", 1.0)
         dividends = acao.dividends
-        financials = acao.financials
 
-        if lpa is None or lpa <= 0 or financials is None or financials.empty:
-            st.error("❌ Não foi possível obter dados financeiros suficientes para esse papel.")
+        if lpa is None or lpa <= 0:
+            st.error("❌ Não foi possível obter o LPA para esse papel.")
         else:
             st.success(f"Preço atual: R$ {preco:.2f}")
             st.write(f"Lucro por ação (LPA, últimos 12 meses): R$ {lpa:.2f}")
@@ -51,32 +51,32 @@ if consultar:
 
             st.markdown("### Parâmetros de projeção")
 
-            net_income = financials.loc["Net Income"].dropna()
-            if len(net_income) >= 2:
-                lucro_series = net_income[::-1]
-                crescimento_lucro = calcular_cagr(lucro_series)
-                if crescimento_lucro is not None:
-                    st.info(f"📈 Crescimento médio histórico do lucro: {crescimento_lucro * 100:.2f}%".replace(".", ","))
+            # Simulação de CAGR Lucro Líq. 5 anos
+            income_stmt = acao.financials
+            if income_stmt is not None and not income_stmt.empty and "Net Income" in income_stmt.index:
+                net_incomes = income_stmt.loc["Net Income"].dropna().sort_index(ascending=True)
+                if len(net_incomes) >= 5:
+                    cagr_lucro = calcular_cagr(net_incomes[-5:].values)
+                    if cagr_lucro is not None:
+                        st.info(f"📈 CAGR Lucro Líquido 5 anos: {cagr_lucro * 100:.2f}%".replace(".", ","))
 
-            if dividends is not None and not dividends.empty and len(net_income) >= 1:
-                dividendos_anuais = dividends.resample("Y").sum()
-                payout_anual = []
-                for ano in net_income.index:
-                    ano_str = str(ano.year if hasattr(ano, 'year') else int(str(ano)[0:4]))
-                    dividendos_ano = dividendos_anuais.get(ano_str)
-                    lucro = net_income[ano]
-                    if dividendos_ano is not None and lucro > 0:
-                        payout_anual.append(dividendos_ano / lucro)
-                if payout_anual:
-                    payout_medio = sum(payout_anual) / len(payout_anual)
-                    st.info(f"📤 Payout médio histórico: {payout_medio * 100:.2f}%".replace(".", ","))
-                else:
-                    payout_medio = 0.4
-            else:
-                payout_medio = 0.4
+            # Simulação de Dividend Yield médio 5 anos
+            if dividends is not None and not dividends.empty:
+                hist = acao.history(period="5y")
+                hist["Year"] = hist.index.year
+                dividendos_anuais = dividends.groupby(dividends.index.year).sum()
+                precos_medios_anuais = hist.groupby("Year")["Close"].mean()
+                dy_anuais = []
+                for ano in dividendos_anuais.index:
+                    if ano in precos_medios_anuais:
+                        dy = dividendos_anuais[ano] / precos_medios_anuais[ano]
+                        dy_anuais.append(dy)
+                if dy_anuais:
+                    dy_medio = np.mean(dy_anuais)
+                    st.info(f"📤 Dividend Yield médio 5 anos: {dy_medio * 100:.2f}%".replace(".", ","))
 
             crescimento = st.slider("Crescimento anual do lucro (%)", 0.00, 0.30, 0.10, step=0.01)
-            payout = st.slider("Payout Ratio (%)", 0, 100, int(payout_medio * 100)) / 100
+            payout = st.slider("Payout Ratio (%)", 0, 100, 50) / 100
             anos = st.slider("Período de análise (anos)", 1, 20, 10)
             margem = st.slider("Margem de segurança (%)", 0, 50, 10) / 100
 
