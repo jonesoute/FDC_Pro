@@ -19,11 +19,10 @@ def get_taxa_selic_futura():
     except:
         return 0.105
 
-def calcular_crescimento_medio(lucros):
-    lucros = lucros[::-1]
-    if len(lucros) >= 2 and lucros.iloc[0] > 0 and lucros.iloc[-1] > 0:
-        anos = len(lucros) / 4
-        return (lucros.iloc[-1] / lucros.iloc[0])**(1 / anos) - 1
+def calcular_cagr(valores):
+    if len(valores) >= 2 and valores.iloc[0] > 0 and valores.iloc[-1] > 0:
+        anos = len(valores) - 1
+        return (valores.iloc[-1] / valores.iloc[0]) ** (1 / anos) - 1
     return None
 
 if consultar:
@@ -35,10 +34,9 @@ if consultar:
         lpa = info.get("trailingEps", None)
         beta = info.get("beta", 1.0)
         dividends = acao.dividends
-        financials = acao.financials.T
-        lucros = financials["Net Income"] if "Net Income" in financials.columns else None
+        financials = acao.financials
 
-        if lpa is None or lpa <= 0 or lucros is None or lucros.isnull().all():
+        if lpa is None or lpa <= 0 or financials is None or financials.empty:
             st.error("❌ Não foi possível obter dados financeiros suficientes para esse papel.")
         else:
             st.success(f"Preço atual: R$ {preco:.2f}")
@@ -52,20 +50,33 @@ if consultar:
             st.write(f"CAPM estimado: {capm:.2%}".replace(".", ","))
 
             st.markdown("### Parâmetros de projeção")
-            crescimento_medio = calcular_crescimento_medio(lucros["Net Income"]) if isinstance(lucros, pd.DataFrame) else None
-            if crescimento_medio is not None:
-                st.info(f"📈 Crescimento médio do lucro: {crescimento_medio*100:.2f}%".replace(".", ","))
 
-            if dividends is not None and not dividends.empty:
-                dividendos_12m = dividends.last("1Y").sum()
-                lucro_total = lpa * info.get("sharesOutstanding", 1)
-                payout_estimado = dividendos_12m / lucro_total if lucro_total > 0 else 0
-                st.info(f"📤 Payout médio estimado: {payout_estimado*100:.2f}%".replace(".", ","))
+            net_income = financials.loc["Net Income"].dropna()
+            if len(net_income) >= 2:
+                lucro_series = net_income[::-1]
+                crescimento_lucro = calcular_cagr(lucro_series)
+                if crescimento_lucro is not None:
+                    st.info(f"📈 Crescimento médio histórico do lucro: {crescimento_lucro * 100:.2f}%".replace(".", ","))
+
+            if dividends is not None and not dividends.empty and len(net_income) >= 1:
+                dividendos_anuais = dividends.resample("Y").sum()
+                payout_anual = []
+                for ano in net_income.index:
+                    ano_str = str(ano.year if hasattr(ano, 'year') else int(str(ano)[0:4]))
+                    dividendos_ano = dividendos_anuais.get(ano_str)
+                    lucro = net_income[ano]
+                    if dividendos_ano is not None and lucro > 0:
+                        payout_anual.append(dividendos_ano / lucro)
+                if payout_anual:
+                    payout_medio = sum(payout_anual) / len(payout_anual)
+                    st.info(f"📤 Payout médio histórico: {payout_medio * 100:.2f}%".replace(".", ","))
+                else:
+                    payout_medio = 0.4
             else:
-                payout_estimado = 0.4
+                payout_medio = 0.4
 
             crescimento = st.slider("Crescimento anual do lucro (%)", 0.00, 0.30, 0.10, step=0.01)
-            payout = st.slider("Payout Ratio (%)", 0, 100, int(payout_estimado*100)) / 100
+            payout = st.slider("Payout Ratio (%)", 0, 100, int(payout_medio * 100)) / 100
             anos = st.slider("Período de análise (anos)", 1, 20, 10)
             margem = st.slider("Margem de segurança (%)", 0, 50, 10) / 100
 
